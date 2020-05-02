@@ -35,6 +35,10 @@ namespace GoogleAccountMerge
                 TargetAccount.Text = gmail;
                 TargetButton.Text = "Disconnect";
             }
+
+            DownloadButton.Enabled = true;
+            MergeButton.Enabled = true;
+            ExecuteButton.Enabled = true;
         }
         private void OnConnectionFail(string connectionName)
         {
@@ -50,6 +54,10 @@ namespace GoogleAccountMerge
                 TargetAccount.Text = "";
                 TargetButton.Text = "Connect";
             }
+
+            DownloadButton.Enabled = true;
+            MergeButton.Enabled = true;
+            ExecuteButton.Enabled = true;
         }
         private void OnDisconnected(string connectionName)
         {
@@ -65,18 +73,62 @@ namespace GoogleAccountMerge
                 TargetAccount.Text = "";
                 TargetButton.Text = "Connect";
             }
+
+            DownloadButton.Enabled = true;
+            MergeButton.Enabled = true;
+            ExecuteButton.Enabled = true;
         }
         private void OnReadContactsReady(string connectionName, List<Contact> contacts)
         {
+            if (connectionName.Equals(SOURCE_NAME))
+            {
+                SourceListBox.Items.Clear();
 
+                foreach (Contact item in contacts)
+                {
+                    if (item.Phonenumbers.Count == 0) continue;
+                    string boxItem = item.Name.FullName + " | " + item.Phonenumbers[0].Value;
+                    SourceListBox.Items.Add(boxItem);
+                }
+            }
+            else if (connectionName.Equals(TARGET_NAME))
+            {
+                OldTargetListBox.Items.Clear();
+
+                foreach (Contact item in contacts)
+                {
+                    //if (item.Phonenumbers.Count == 0) continue;
+                    string boxItem = item.Name.AdditionalName + "|" + item.Name.FullName + " | " + item.Name.GivenName + " | " + item.Name.FamilyName + "|" + item.Phonenumbers[0].Value;
+                    OldTargetListBox.Items.Add(boxItem);
+                }
+            }
+
+            DownloadButton.Enabled = true;
+            MergeButton.Enabled = true;
+            ExecuteButton.Enabled = true;
         }
         private void OnContactsMergingSuccess(string connectionName)
         {
-
+            TargetLog.Text = "Contacts updated successfully!";
         }
         private void OnContactsMergingFail(string connectionName)
         {
+            TargetLog.Text = "Failed to update contacts.";
+        }
 
+        private void OnTaskFail(string connectionName)
+        {
+            if (connectionName.Equals(SOURCE_NAME))
+            {
+                SourceLog.Text = "Action failed, check connection first";     
+            }
+            else if (connectionName.Equals(TARGET_NAME))
+            {
+                TargetLog.Text = "Action failed, check connection first";
+            }
+            DownloadButton.Enabled = true;
+            MergeButton.Enabled = true;
+            ExecuteButton.Enabled = true;
         }
         // Delegates end
 
@@ -96,7 +148,8 @@ namespace GoogleAccountMerge
                 this.OnDisconnected,
                 this.OnReadContactsReady,
                 this.OnContactsMergingSuccess,
-                this.OnContactsMergingFail
+                this.OnContactsMergingFail,
+                this.OnConnectionFail
             );
 
             TargetConnection = new GoogleConnection(
@@ -106,7 +159,8 @@ namespace GoogleAccountMerge
                 this.OnDisconnected,
                 this.OnReadContactsReady,
                 this.OnContactsMergingSuccess,
-                this.OnContactsMergingFail
+                this.OnContactsMergingFail,
+                this.OnConnectionFail
             );
         }
 
@@ -138,14 +192,42 @@ namespace GoogleAccountMerge
             }
         }
 
-        private void RefreshButton_Click(object sender, EventArgs e)
+        private void DownloadButton_Click(object sender, EventArgs e)
         {
+            if (TargetConnection.IsConnected())
+            {
+                TargetConnection.InitReadContacts();
+            }
+            
+            if (SourceConnection.IsConnected())
+            { 
+                SourceConnection.InitReadContacts();
+            }    
+        }
+        private void MergeButton_Click(object sender, EventArgs e)
+        {
+            if (!TargetConnection.IsConnected() || !SourceConnection.IsConnected())
+            {
+                return;
+            }
 
+            List<Contact> mergedContacts = Utils.MergeContactsPreview(SourceConnection.LastContactsList, TargetConnection.LastContactsList);
+            NewTargetListBox.Items.Clear();
+            foreach (Contact item in mergedContacts)
+            {
+                if (item.Phonenumbers.Count == 0) continue;
+                string boxItem = item.Name.FullName + " | " + item.Phonenumbers[0].Value;
+                NewTargetListBox.Items.Add(boxItem);
+            } 
         }
 
         private void ExecuteButton_Click(object sender, EventArgs e)
         {
-
+            if (TargetConnection.IsConnected() && SourceConnection.IsConnected())
+            {
+                TargetConnection.InitMergeContacts(SourceConnection.LastContactsList);
+            }
         }
+
     }
 }

@@ -28,7 +28,6 @@
         /// </summary>
         private void InitializeComponent()
         {
-            
             this.tableLayoutPanel1 = new System.Windows.Forms.TableLayoutPanel();
             this.panel2 = new System.Windows.Forms.Panel();
             this.TargetButton = new System.Windows.Forms.Button();
@@ -44,7 +43,8 @@
             this.panel7 = new System.Windows.Forms.Panel();
             this.SourceLog = new System.Windows.Forms.Label();
             this.panel6 = new System.Windows.Forms.Panel();
-            this.RefreshButton = new System.Windows.Forms.Button();
+            this.MergeButton = new System.Windows.Forms.Button();
+            this.DownloadButton = new System.Windows.Forms.Button();
             this.panel5 = new System.Windows.Forms.Panel();
             this.NewTargetListBox = new System.Windows.Forms.ListBox();
             this.label2 = new System.Windows.Forms.Label();
@@ -175,7 +175,7 @@
             this.ExecuteButton.Name = "ExecuteButton";
             this.ExecuteButton.Size = new System.Drawing.Size(88, 29);
             this.ExecuteButton.TabIndex = 2;
-            this.ExecuteButton.Text = "Execute";
+            this.ExecuteButton.Text = "Upload";
             this.ExecuteButton.UseVisualStyleBackColor = false;
             this.ExecuteButton.Click += new System.EventHandler(this.ExecuteButton_Click);
             // 
@@ -233,25 +233,39 @@
             // 
             // panel6
             // 
-            this.panel6.Controls.Add(this.RefreshButton);
+            this.panel6.Controls.Add(this.MergeButton);
+            this.panel6.Controls.Add(this.DownloadButton);
             this.panel6.Controls.Add(this.ExecuteButton);
             this.panel6.Location = new System.Drawing.Point(679, 491);
             this.panel6.Name = "panel6";
             this.panel6.Size = new System.Drawing.Size(332, 28);
             this.panel6.TabIndex = 2;
             // 
-            // RefreshButton
+            // MergeButton
             // 
-            this.RefreshButton.BackColor = System.Drawing.SystemColors.ControlDark;
-            this.RefreshButton.Font = new System.Drawing.Font("Microsoft Sans Serif", 10.2F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.RefreshButton.ForeColor = System.Drawing.Color.White;
-            this.RefreshButton.Location = new System.Drawing.Point(99, -1);
-            this.RefreshButton.Name = "RefreshButton";
-            this.RefreshButton.Size = new System.Drawing.Size(134, 29);
-            this.RefreshButton.TabIndex = 3;
-            this.RefreshButton.Text = "Refresh Lists";
-            this.RefreshButton.UseVisualStyleBackColor = false;
-            this.RefreshButton.Click += new System.EventHandler(this.RefreshButton_Click);
+            this.MergeButton.BackColor = System.Drawing.Color.LightSeaGreen;
+            this.MergeButton.Font = new System.Drawing.Font("Microsoft Sans Serif", 10.2F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.MergeButton.ForeColor = System.Drawing.Color.White;
+            this.MergeButton.Location = new System.Drawing.Point(122, 0);
+            this.MergeButton.Name = "MergeButton";
+            this.MergeButton.Size = new System.Drawing.Size(107, 29);
+            this.MergeButton.TabIndex = 4;
+            this.MergeButton.Text = "Merge";
+            this.MergeButton.UseVisualStyleBackColor = false;
+            this.MergeButton.Click += new System.EventHandler(this.MergeButton_Click);
+            // 
+            // DownloadButton
+            // 
+            this.DownloadButton.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(0)))), ((int)(((byte)(192)))), ((int)(((byte)(192)))));
+            this.DownloadButton.Font = new System.Drawing.Font("Microsoft Sans Serif", 10.2F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.DownloadButton.ForeColor = System.Drawing.Color.White;
+            this.DownloadButton.Location = new System.Drawing.Point(0, 0);
+            this.DownloadButton.Name = "DownloadButton";
+            this.DownloadButton.Size = new System.Drawing.Size(107, 29);
+            this.DownloadButton.TabIndex = 3;
+            this.DownloadButton.Text = "Download";
+            this.DownloadButton.UseVisualStyleBackColor = false;
+            this.DownloadButton.Click += new System.EventHandler(this.DownloadButton_Click);
             // 
             // panel5
             // 
@@ -386,9 +400,10 @@
         private System.Windows.Forms.Panel panel7;
         private System.Windows.Forms.Label SourceLog;
         private System.Windows.Forms.Panel panel6;
-        private System.Windows.Forms.Button RefreshButton;
+        private System.Windows.Forms.Button DownloadButton;
         private System.Windows.Forms.Panel panel8;
         private System.Windows.Forms.Label TargetLog;
+        private System.Windows.Forms.Button MergeButton;
         private System.Windows.Forms.Label TargetAccount;
     }
 }
