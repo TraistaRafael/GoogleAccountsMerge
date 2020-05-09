@@ -175,7 +175,7 @@
             this.ExecuteButton.Name = "ExecuteButton";
             this.ExecuteButton.Size = new System.Drawing.Size(88, 29);
             this.ExecuteButton.TabIndex = 2;
-            this.ExecuteButton.Text = "Upload";
+            this.ExecuteButton.Text = "Merge";
             this.ExecuteButton.UseVisualStyleBackColor = false;
             this.ExecuteButton.Click += new System.EventHandler(this.ExecuteButton_Click);
             // 
@@ -250,7 +250,7 @@
             this.MergeButton.Name = "MergeButton";
             this.MergeButton.Size = new System.Drawing.Size(107, 29);
             this.MergeButton.TabIndex = 4;
-            this.MergeButton.Text = "Merge";
+            this.MergeButton.Text = "Preview";
             this.MergeButton.UseVisualStyleBackColor = false;
             this.MergeButton.Click += new System.EventHandler(this.MergeButton_Click);
             // 

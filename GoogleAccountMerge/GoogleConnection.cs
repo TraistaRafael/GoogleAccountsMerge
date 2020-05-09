@@ -20,6 +20,7 @@ using Google.GData.Contacts;
 using System.Collections.Concurrent;
 using Google.Apis.People.v1;
 using Google.Apis.People.v1.Data;
+using PhoneNumber = Google.GData.Extensions.PhoneNumber;
 
 namespace GoogleAccountMerge
 {
@@ -27,7 +28,7 @@ namespace GoogleAccountMerge
     public delegate void OnConnectionFailDelegate(string connectionName);
     public delegate void OnDisconnectedDelegate(string connectionName);
     public delegate void OnReadContactsReadyDelegate(string connectionName, List<Contact> contacts);
-    public delegate void OnContactsMergingSuccessDelegate(string connectionName);
+    public delegate void OnContactsMergingSuccessDelegate(string connectionName, int successAlterations, int failAlterations);
     public delegate void OnContactsMergingFailDelegate(string connectionName);
     public delegate void OnTaskFailDelegate(string connectionName);
 
@@ -51,17 +52,18 @@ namespace GoogleAccountMerge
         private static int THREAD_SLEEP_MILLIS = 500;
         string ConnectionName { get; set; }
 
-        // Thread utils
+        // Thread
         bool KeepAlive = false;
         List<GoogleConnectionTask> TaskQueue = new List<GoogleConnectionTask>();
 
-        // Google utils
+        // Google
         UserCredential UserCredential;
         OAuth2Parameters OAuth2Parameters;
         ContactsRequest ContactsRequest;
 
-        //UI utils
+        // UI
         public List<Contact> LastContactsList = new List<Contact>();
+        string CurrentUserEmail;
 
         //Delegates
         OnConnectionSuccessDelegate OnConnectionSuccessDelegateInstance;
@@ -136,7 +138,7 @@ namespace GoogleAccountMerge
                     Console.WriteLine("ERROR: " + e.Message);
                 }
                 KeepAlive = false;
-                OnConnectionFailDelegateInstance(this.ConnectionName);
+                OnConnectionFailDelegateInstance(this.ConnectionName + ex.Message);
             }
         }
 
@@ -170,14 +172,6 @@ namespace GoogleAccountMerge
                 "profile",
                 "email"
             };
-            //"https://www.googleapis.com/auth/user.addresses.read",
-            //    "https://www.googleapis.com/auth/gmail.readonly",
-            //    "https://www.googleapis.com/auth/plus.profile.emails.read",
-            //    "https://mail.google.com/",
-            //    "https://www.googleapis.com/auth/user.emails.read",
-            //"https://www.googleapis.com/auth/user.emails.read",
-            //"https://www.googleapis.com/auth/plus.profile.emails.read",
-            //"https://mail.google.com/",
 
             using (var stream = new FileStream("client_secrets.json", FileMode.Open, FileAccess.Read))
             {
@@ -191,16 +185,16 @@ namespace GoogleAccountMerge
                         HttpClientInitializer = UserCredential,
                         ApplicationName = "contactsmergingtool",
                     });
-
-                Console.WriteLine("User credential : [" + UserCredential.UserId + "]");
+                
                 //Read email address
                 PeopleResource.GetRequest peopleRequest = peopleService.People.Get("people/me");
                 peopleRequest.RequestMaskIncludeField = "person.names,person.emailAddresses";
                 Person profile = peopleRequest.Execute();
-                string useremail = profile.EmailAddresses.FirstOrDefault().Value;
+                CurrentUserEmail = profile.EmailAddresses.FirstOrDefault().Value;
 
                 //Notify that connection is ready
-                OnConnectionSuccessDelegateInstance.Invoke(this.ConnectionName, useremail);
+                //Notify that connection is ready
+                OnConnectionSuccessDelegateInstance.Invoke(this.ConnectionName, CurrentUserEmail);
 
                 // Translate the Oauth permissions to something the old client libray can read
                 OAuth2Parameters = new OAuth2Parameters();
@@ -228,7 +222,8 @@ namespace GoogleAccountMerge
                 }
                 catch (Exception a)
                 {
-                    Console.WriteLine("A Google Apps error occurred.");
+                    OnTaskFailDelegateInstance("Error: " + a.Message);
+                    Console.WriteLine("A Google Apps error occurred: " + a.Message);
                 }
 
             }
@@ -239,17 +234,18 @@ namespace GoogleAccountMerge
           
             if (task is GoogleConnectionTask_ReadContacts)
             {
-                Console.WriteLine("Task::ReadContacts");
                 LastContactsList = ReadContacts(ContactsRequest);
                 OnReadContactsReadyDelegateInstance(this.ConnectionName, LastContactsList);
             }
             else if (task is GoogleConnectionTask_MergeContacts) 
             {
                 Console.WriteLine("Task::MergeContacts");
-                bool result = MergeContacts(((GoogleConnectionTask_MergeContacts) task).SourceContacts);
+                int successAlterations = 0;
+                int failAlterations = 0;
+                bool result = MergeContacts(((GoogleConnectionTask_MergeContacts) task).SourceContacts, ref successAlterations, ref failAlterations);
                 if (result)
                 {
-                    OnContactsMergingSuccessDelegateInstance(this.ConnectionName);
+                    OnContactsMergingSuccessDelegateInstance(this.ConnectionName, successAlterations, failAlterations);
                 }
                 else
                 {
@@ -260,26 +256,61 @@ namespace GoogleAccountMerge
 
         private List<Contact> ReadContacts(ContactsRequest cr)
         {
-            Feed<Contact> f = cr.GetContacts("default");
-            // Nu sunt sigut daca cr.GetContacts() sunt incarcate la acest moment
+            Feed<Group> groups = cr.GetGroups("default"); //
+            Feed<Contact> f = cr.GetContacts("default"); //"default"
+            // Nu sunt sigur daca cr.GetContacts() sunt incarcate la acest moment
             // e posibil sa fie incarcate separat la iterarea foreach, de asta le pun intr-o alta lista
 
             List<Contact> contacts = new List<Contact>();
             foreach (Contact c in f.Entries)
             {
-                //if (c.Phonenumbers.Count > 0)
-                //{
-                    contacts.Add(c);
-                    //Console.WriteLine(c.Name.FullName + "  " + c.Phonenumbers[0].Value);
-                //}
+                Console.WriteLine(c.Name.FullName);
+                if(c.GroupMembership.Count == 0)
+                {
+                    //daca contactul nu are nici un grup inseamna ca nu apartine grupului default si apare in "Other contacts"
+                    //in aceasta lista sunt adresele cu care s-a interactionat de pe cont, 
+                    //si nu apar by default in lista de pe telefoane
+                    continue;
+                }
+
+                if (c.Phonenumbers.Count == 0)
+                {
+                    //zombie contact, ignore
+                    continue;
+                }
+                contacts.Add(c);            
             }
 
             return contacts;
         }
 
-        bool MergeContacts(List<Contact> sourceContacts)
+        bool MergeContacts(List<Contact> sourceContacts, ref int successAlterations, ref int failAlterations)
         {
             List<Contact> newTargtContacts = new List<Contact>(sourceContacts);
+            successAlterations = 0;
+            failAlterations = 0;
+            // Prima data cautam grupul in care sa adaugam contactele, 
+            // altfel google nu le pune in lista principala de contacte 
+            GroupMembership groupMembership = null;
+            foreach (Contact existingContact in LastContactsList)
+            {
+                if(existingContact.GroupMembership.Count > 0)
+                {
+                    groupMembership = new GroupMembership()
+                    {
+                        HRef = existingContact.GroupMembership[0].HRef
+                    };
+                    break;
+                }
+            }
+
+            if(groupMembership == null)
+            {
+                groupMembership = new GroupMembership()
+                {
+                    HRef = "http://www.google.com/m8/feeds/groups/" + CurrentUserEmail  + "/base/6"
+                };
+            }
 
             foreach (Contact sourceContact in sourceContacts)
             {
@@ -299,24 +330,36 @@ namespace GoogleAccountMerge
 
                     if (Utils.ContactsAreEqual(sourceContact, targetContact))
                     {
-                        //TODO Check contact update
+                        // Update existing contact
                         addContact = false;
+                        bool updateWasNeeded = false;
+                        if(UpdateTargetContactFromSource(targetContact, sourceContact, ref updateWasNeeded))
+                        {
+                            if(updateWasNeeded)
+                            {
+                                successAlterations++;
+                            }
+                        }
+                        else
+                        {
+                            failAlterations++;
+                        }
                         continue;
                     }
                 }
 
                 if (addContact)
                 {
-                    //TODO add contact in google account
-                    if (InsertGoogleContact(CloneGoogleContact(sourceContact)))
+                    // Insert new contact
+                    Contact clonedContact = Utils.CloneGoogleContact(sourceContact);
+                    clonedContact.GroupMembership.Add(groupMembership);
+                    if (InsertGoogleContact(clonedContact))
                     {
-                        return true;
-                        continue;
-                        
+                        successAlterations++;
                     }
                     else
                     {
-                        return false;
+                        failAlterations++;
                     }
                 }
             }
@@ -339,86 +382,75 @@ namespace GoogleAccountMerge
             }
         }
 
-        private Contact CloneGoogleContact(Contact source)
+        public bool OverrideTargetContactProperties = true;
+        private bool UpdateTargetContactFromSource(Contact targetContact, Contact sourceContact, ref bool updateWasNeeded)
         {
-            Contact newEntry = new Contact();
-            
-            // Set the contact's name.
-            newEntry.Name = new Google.GData.Extensions.Name()
+            try
             {
-                FullName = source.Name.FullName,
-                GivenName = source.Name.GivenName,
-                FamilyName = source.Name.FamilyName,
-            };
+                bool needsUpdate = false;
 
-            newEntry.Content = source.Content;   
-            newEntry.Emails.Concat(source.Emails);
-            newEntry.Phonenumbers.Concat(source.Phonenumbers);
-            newEntry.IMs.Concat(source.IMs);
-            newEntry.PostalAddresses.Concat(source.PostalAddresses);
+                if (OverrideTargetContactProperties)
+                {
+                    bool diffsFound = false;
 
-            return newEntry;
+                    targetContact.Name.FullName = Utils.ContactStringAttributesDiff(sourceContact.Name.FullName, targetContact.Name.FullName, ref diffsFound);
+                    needsUpdate = diffsFound ? true : needsUpdate;
+
+                    targetContact.Name.GivenName = Utils.ContactStringAttributesDiff(sourceContact.Name.GivenName, targetContact.Name.GivenName, ref diffsFound);
+                    needsUpdate = diffsFound ? true : needsUpdate;
+
+                    targetContact.Name.FamilyName = Utils.ContactStringAttributesDiff(sourceContact.Name.FamilyName, targetContact.Name.FamilyName, ref diffsFound);
+                    needsUpdate = diffsFound ? true : needsUpdate;
+
+                    targetContact.Content = Utils.ContactStringAttributesDiff(sourceContact.Content, targetContact.Content, ref diffsFound);
+                    needsUpdate = diffsFound ? true : needsUpdate;
+
+                    diffsFound = false;
+                    ExtensionCollection<EMail> newEmails = Utils.ContactEmailsDiff(sourceContact.Emails, targetContact.Emails, ref diffsFound);
+                    if (diffsFound)
+                    {
+                        needsUpdate = true;
+                        targetContact.Emails.Clear();
+                        foreach (EMail item in newEmails)
+                        {
+                            targetContact.Emails.Add(item);
+                        }
+                    }
+
+                    diffsFound = false;
+                    ExtensionCollection<PhoneNumber> newNumbers = Utils.ContactPhoneNumbersDiff(sourceContact.Phonenumbers, targetContact.Phonenumbers, ref diffsFound);
+                    if (diffsFound)
+                    {
+                        needsUpdate = true;
+                        targetContact.Phonenumbers.Clear();
+                        foreach (PhoneNumber item in newNumbers)
+                        {
+                            targetContact.Phonenumbers.Add(item);
+                        }
+                    }
+                }
+                else
+                {
+                    //TO DO
+                }
+
+                if (needsUpdate)
+                {
+                    ContactsRequest.Update(targetContact);
+                    updateWasNeeded = true;
+                }
+                else
+                {
+                    updateWasNeeded = false; 
+                }
+
+                return true;
+            }
+            catch(Exception e)
+            {
+                return false;
+            }
         }
-        public static Contact CreateContact(ContactsRequest cr)
-        {
-            return null;
-            //Contact newEntry = new Contact();
-            //// Set the contact's name.
-            //newEntry.Name = new Name()
-            //{
-            //    FullName = "Elizabeth Bennet",
-            //    GivenName = "Elizabeth",
-            //    FamilyName = "Bennet",
-            //};
-            //newEntry.Content = "Notes";
-            //// Set the contact's e-mail addresses.
-            //newEntry.Emails.Add(new EMail()
-            //{
-            //    Primary = true,
-            //    Rel = ContactsRelationships.IsHome,
-            //    Address = "liz@gmail.com"
-            //});
-            //newEntry.Emails.Add(new EMail()
-            //{
-            //    Rel = ContactsRelationships.IsWork,
-            //    Address = "liz@example.com"
-            //});
-            //// Set the contact's phone numbers.
-            //newEntry.Phonenumbers.Add(new PhoneNumber()
-            //{
-            //    Primary = true,
-            //    Rel = ContactsRelationships.IsWork,
-            //    Value = "(206)555-1212",
-            //});
-            //newEntry.Phonenumbers.Add(new PhoneNumber()
-            //{
-            //    Rel = ContactsRelationships.IsHome,
-            //    Value = "(206)555-1213",
-            //});
-            //// Set the contact's IM information.
-            //newEntry.IMs.Add(new IMAddress()
-            //{
-            //    Primary = true,
-            //    Rel = ContactsRelationships.IsHome,
-            //    Protocol = ContactsProtocols.IsGoogleTalk,
-            //});
-            //// Set the contact's postal address.
-            //newEntry.PostalAddresses.Add(new StructuredPostalAddress()
-            //{
-            //    Rel = ContactsRelationships.IsWork,
-            //    Primary = true,
-            //    Street = "1600 Amphitheatre Pkwy",
-            //    City = "Mountain View",
-            //    Region = "CA",
-            //    Postcode = "94043",
-            //    Country = "United States",
-            //    FormattedAddress = "1600 Amphitheatre Pkwy Mountain View",
-            //});
-            //// Insert the contact.
-            //Uri feedUri = new Uri(ContactsQuery.CreateContactsUri("default"));
-            //Contact createdEntry = cr.Insert(feedUri, newEntry);
-            //Console.WriteLine("Contact's ID: " + createdEntry.Id);
-            //return createdEntry;
-        }
+  
     }
 }

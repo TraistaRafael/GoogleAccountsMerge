@@ -53,73 +53,6 @@ namespace GoogleAccountMerge
             return false;
         }
 
-        public static Contact MergeTwoContacts(Contact source, Contact target, bool overrideProperties)
-        {
-            return target;
-            //if (overrideProperties)
-            //{
-            //    target = source;
-            //} else
-            //{
-            //    source.Id
-            //}
-            //// Set the contact's name.
-            //newEntry.Name = new Name()
-            //{
-            //    FullName = "Elizabeth Bennet",
-            //    GivenName = "Elizabeth",
-            //    FamilyName = "Bennet",
-            //};
-            //newEntry.Content = "Notes";
-            //// Set the contact's e-mail addresses.
-            //newEntry.Emails.Add(new EMail()
-            //{
-            //    Primary = true,
-            //    Rel = ContactsRelationships.IsHome,
-            //    Address = "liz@gmail.com"
-            //});
-            //newEntry.Emails.Add(new EMail()
-            //{
-            //    Rel = ContactsRelationships.IsWork,
-            //    Address = "liz@example.com"
-            //});
-            //// Set the contact's phone numbers.
-            //newEntry.Phonenumbers.Add(new PhoneNumber()
-            //{
-            //    Primary = true,
-            //    Rel = ContactsRelationships.IsWork,
-            //    Value = "(206)555-1212",
-            //});
-            //newEntry.Phonenumbers.Add(new PhoneNumber()
-            //{
-            //    Rel = ContactsRelationships.IsHome,
-            //    Value = "(206)555-1213",
-            //});
-            //// Set the contact's IM information.
-            //newEntry.IMs.Add(new IMAddress()
-            //{
-            //    Primary = true,
-            //    Rel = ContactsRelationships.IsHome,
-            //    Protocol = ContactsProtocols.IsGoogleTalk,
-            //});
-            //// Set the contact's postal address.
-            //newEntry.PostalAddresses.Add(new StructuredPostalAddress()
-            //{
-            //    Rel = ContactsRelationships.IsWork,
-            //    Primary = true,
-            //    Street = "1600 Amphitheatre Pkwy",
-            //    City = "Mountain View",
-            //    Region = "CA",
-            //    Postcode = "94043",
-            //    Country = "United States",
-            //    FormattedAddress = "1600 Amphitheatre Pkwy Mountain View",
-            //});
-            //// Insert the contact.
-            //Uri feedUri = new Uri(ContactsQuery.CreateContactsUri("default"));
-            //Contact createdEntry = cr.Insert(feedUri, newEntry);
-            //Console.WriteLine("Contact's ID: " + createdEntry.Id);
-        }
-
         public static List<Contact> MergeContactsPreview(List<Contact> source, List<Contact> target)
         {
             List<Contact> result = new List<Contact>(target);
@@ -142,8 +75,11 @@ namespace GoogleAccountMerge
 
                     if (ContactsAreEqual(sourceContact, targetContact))
                     {
-                        //TODO Check contact update
                         addContact = false;
+                        bool diffFound = false;
+                        targetContact.Name.FullName = ContactStringAttributesDiff(sourceContact.Name.FullName, targetContact.Name.FullName, ref diffFound);
+                        targetContact.Name.GivenName = ContactStringAttributesDiff(sourceContact.Name.GivenName, targetContact.Name.GivenName, ref diffFound);
+                        targetContact.Name.FamilyName = ContactStringAttributesDiff(sourceContact.Name.FamilyName, targetContact.Name.FamilyName, ref diffFound);
                         continue;
                     }
                 }
@@ -157,41 +93,139 @@ namespace GoogleAccountMerge
             return result;
         }
 
-        public static List<Contact> MergeContactsGetOnlyNewContacts(List<Contact> source, List<Contact> target)
+        public static string ContactStringAttributesDiff(string source, string target, ref bool differencesFound)
         {
-            List<Contact> result = new List<Contact>();
-
-            foreach (Contact sourceContact in source)
+            if (source == null && target == null)
             {
-                if (sourceContact.Phonenumbers.Count == 0)
+                differencesFound = false;
+                return "";
+            }
+
+            if (source == null)
+            {
+                differencesFound = true;
+                return target;
+            }
+
+            if (target == null)
+            {
+                differencesFound = true;
+                return source;
+            }
+
+            if (!source.Equals(target))
+            {
+                differencesFound = true;
+                return source;
+            }
+
+            return target;
+        }
+        public static ExtensionCollection<EMail> ContactEmailsDiff(ExtensionCollection<EMail> source, ExtensionCollection<EMail> target, ref bool differencesFound)
+        {
+            ExtensionCollection<EMail> result = new ExtensionCollection<EMail>();
+
+            foreach (EMail targetEmail in target)
+            {
+                result.Add(targetEmail);
+            }
+
+            foreach (EMail sourceEmail in source)
+            {
+                bool emailExists = false;
+                foreach (EMail resultEmail in result)
                 {
-                    continue;
+                    if (sourceEmail.Address.Equals(resultEmail.Address))
+                    {
+                        emailExists = true;
+                        break;
+                    }
                 }
 
-                bool addContact = true;
-
-                foreach (Contact targetContact in result)
+                if (!emailExists)
                 {
-                    if (targetContact.Phonenumbers.Count == 0)
-                    {
-                        continue;
-                    }
-
-                    if (ContactsAreEqual(sourceContact, targetContact))
-                    {
-                        //TODO Check contact update
-                        addContact = false;
-                        continue;
-                    }
-                }
-
-                if (addContact)
-                {
-                    result.Add(sourceContact);
+                    differencesFound = true;
+                    result.Add(sourceEmail);
                 }
             }
 
             return result;
+        }
+        public static ExtensionCollection<PhoneNumber> ContactPhoneNumbersDiff(ExtensionCollection<PhoneNumber> source, ExtensionCollection<PhoneNumber> target, ref bool differencesFound)
+        {
+            ExtensionCollection<PhoneNumber> result = new ExtensionCollection<PhoneNumber>();
+
+            foreach (PhoneNumber targetNumber in target)
+            {
+                result.Add(targetNumber);
+            }
+
+            foreach (PhoneNumber sourceNumber in source)
+            {
+                bool numberExists = false;
+                foreach (PhoneNumber resultNumber in result)
+                {
+                    if (sourceNumber.Value.Equals(resultNumber.Value))
+                    {
+                        numberExists = true;
+                        break;
+                    }
+                }
+
+                if (!numberExists)
+                {
+                    differencesFound = true;
+                    result.Add(sourceNumber);
+                }
+            }
+
+            return result;
+        }
+        public static Contact CloneGoogleContact(Contact source)
+        {
+            Contact newEntry = new Contact();
+
+            newEntry.Name = new Google.GData.Extensions.Name()
+            {
+                FullName = source.Name.FullName,
+                GivenName = source.Name.GivenName,
+                FamilyName = source.Name.FamilyName,
+            };
+
+            newEntry.Content = source.Content;
+
+            foreach (PhoneNumber phoneNumber in source.Phonenumbers)
+            {
+                newEntry.Phonenumbers.Add(phoneNumber);
+                continue;
+                PhoneNumber newNumber = new PhoneNumber();
+                newNumber.Primary = phoneNumber.Primary;
+                newNumber.Rel = phoneNumber.Rel.Length > 0 ? phoneNumber.Rel : ContactsRelationships.IsMain;
+                newNumber.Value = phoneNumber.Value;
+                newEntry.Phonenumbers.Add(newNumber);
+            }
+
+            foreach (EMail email in source.Emails)
+            {
+                newEntry.Emails.Add(email);
+                continue;
+                EMail newEmail = new EMail();
+                newEmail.Rel = email.Rel.Length > 0 ? email.Rel : ContactsRelationships.IsMain;
+                newEmail.Address = email.Address;
+                newEntry.Emails.Add(newEmail);
+            }
+
+            foreach (IMAddress item in source.IMs)
+            {
+                newEntry.IMs.Add(item);
+            }
+
+            foreach (StructuredPostalAddress item in source.PostalAddresses)
+            {
+                newEntry.PostalAddresses.Add(item);
+            }
+
+            return newEntry;
         }
     }
 }
