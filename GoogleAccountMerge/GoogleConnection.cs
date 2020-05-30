@@ -153,6 +153,7 @@ namespace GoogleAccountMerge
                 }
                 catch (Exception e)
                 {
+                    Console.WriteLine("Failed to remove Google cached connection file. Reason: " + e.Message);
                     //Continua, probabil ca folderul nu a fost creat inca de catre o instanta anterioara
                 }
                 OnDisconnectedDelegateInstance(this.ConnectionName);
@@ -203,6 +204,8 @@ namespace GoogleAccountMerge
 
                 //Init contact request
                 RequestSettings settings = new RequestSettings("Google contacts tutorial", OAuth2Parameters);
+                settings.Maximum = 10000000; //default is 25
+                settings.PageSize = 10000000;
                 ContactsRequest = new ContactsRequest(settings);
 
                 //Read Contacts
@@ -257,31 +260,38 @@ namespace GoogleAccountMerge
         private List<Contact> ReadContacts(ContactsRequest cr)
         {
             Feed<Group> groups = cr.GetGroups("default"); //
-            Feed<Contact> f = cr.GetContacts("default"); //"default"
+            Feed<Contact> googleContacts = cr.GetContacts("default"); //"default"
             // Nu sunt sigur daca cr.GetContacts() sunt incarcate la acest moment
             // e posibil sa fie incarcate separat la iterarea foreach, de asta le pun intr-o alta lista
 
-            List<Contact> contacts = new List<Contact>();
-            foreach (Contact c in f.Entries)
+            List<Contact> processedContacts = new List<Contact>();
+
+            int totalProcessedContacts = 0;
+
+            foreach (Contact c in googleContacts.Entries)
             {
-                Console.WriteLine(c.Name.FullName);
+                totalProcessedContacts++;
                 if(c.GroupMembership.Count == 0)
                 {
                     //daca contactul nu are nici un grup inseamna ca nu apartine grupului default si apare in "Other contacts"
                     //in aceasta lista sunt adresele cu care s-a interactionat de pe cont, 
                     //si nu apar by default in lista de pe telefoane
+                    Console.WriteLine(c.Name.FullName + "Grup lipsa - ignorare");
                     continue;
                 }
 
                 if (c.Phonenumbers.Count == 0)
                 {
                     //zombie contact, ignore
+                    Console.WriteLine(c.Name.FullName + "Numar lipsa - ignorare");
                     continue;
                 }
-                contacts.Add(c);            
+                processedContacts.Add(c);            
             }
 
-            return contacts;
+            Console.WriteLine("Numarul total de contacte procesate: " + totalProcessedContacts);
+
+            return processedContacts;
         }
 
         bool MergeContacts(List<Contact> sourceContacts, ref int successAlterations, ref int failAlterations)
