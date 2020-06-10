@@ -149,7 +149,8 @@ namespace GoogleAccountMerge
                 KeepAlive = false;
                 try
                 {
-                    Directory.Delete("C:/Users/trais/AppData/Roaming/ContactsMergingToolOAuth" + ConnectionName, true);
+                    string appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+                    Directory.Delete(appDataPath + "/ContactsMergingToolOAuth" + ConnectionName, true);
                 }
                 catch (Exception e)
                 {
